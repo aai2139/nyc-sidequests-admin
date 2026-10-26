@@ -7,7 +7,7 @@ export default function UnauthorizedPage() {
       <section className="message-card">
         <p className="eyebrow">Access denied</p>
         <h1>This account is not a superadmin.</h1>
-        <p>Your Google login is valid, but your database profile does not have administrative access.</p>
+        <p>This account was signed back out because it does not have administrative access.</p>
         <div className="button-row"><LogoutButton /><Link className="primary-button" href="/login">Try another account</Link></div>
       </section>
     </main>

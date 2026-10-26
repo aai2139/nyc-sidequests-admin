@@ -47,7 +47,7 @@ export async function updateMedia(_state: MediaActionState, formData: FormData):
   if (!UUID.test(id)) return { error: "Invalid media ID." };
   let stops: unknown;
   try { stops = JSON.parse(String(formData.get("stops") ?? "")); } catch { return { error: "Stops must be valid JSON." }; }
-  if (!Array.isArray(stops) || stops.length !== 3) return { error: "Stops must be a JSON array with exactly three items." };
+  if (!Array.isArray(stops) || stops.length < 2 || stops.length > 5) return { error: "Stops must be a JSON array with two to five items." };
   const values = {
     title: text(formData, "title", 100), hook: text(formData, "hook", 240), neighborhood: text(formData, "neighborhood", 60),
     budget_note: text(formData, "budgetNote", 240), status: text(formData, "status", 20), stops,

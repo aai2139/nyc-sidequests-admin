@@ -11,13 +11,14 @@ export async function generateAdminMedia(input: Input) {
   if (!apiKey) throw new Error("Gemini is not configured.");
   const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const promptText = [
-    "Create one concise NYC sidequest with exactly three sequential stops.",
+    "Create one concise NYC sidequest with between two and five sequential stops.",
     `Area: ${input.neighborhood}`,
     `Per-person budget: $${input.budgetMin}–$${input.budgetMax}`,
     `Party size: ${input.partySize}`,
     `Vibe: ${input.vibe}`,
     `Preferences: ${JSON.stringify(input.preferences || "None")}`,
-    "Return a playful title, one-sentence hook, three stops, and a concise budget note.",
+    "Return a playful title, one-sentence hook, two to five stops, and a concise budget note.",
+    "Choose the stop count that creates the strongest, most cohesive outing. Use fewer stops when extra stops would weaken the route, timing, or budget.",
     "If an activity requires choosing a business or hidden destination, name one to three real specific options. Broad park, waterfront, or neighborhood strolls can use the named area itself.",
     "Every place needs a proper name, useful address or area description, and precise map search query.",
     "Do not repeat area, budget, party size, or vibe in the title and hook when those facts are already metadata.",
@@ -34,7 +35,7 @@ export async function generateAdminMedia(input: Input) {
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING }, hook: { type: Type.STRING }, budgetNote: { type: Type.STRING },
-          stops: { type: Type.ARRAY, minItems: 3, maxItems: 3, items: { type: Type.OBJECT, properties: {
+          stops: { type: Type.ARRAY, minItems: 2, maxItems: 5, items: { type: Type.OBJECT, properties: {
             label: { type: Type.STRING }, activity: { type: Type.STRING }, places: { type: Type.ARRAY, minItems: 1, maxItems: 3, items: { type: Type.OBJECT, properties: {
               name: { type: Type.STRING }, address: { type: Type.STRING }, mapQuery: { type: Type.STRING },
             }, required: ["name", "address", "mapQuery"] } },
@@ -46,7 +47,7 @@ export async function generateAdminMedia(input: Input) {
   });
   if (!response.text) throw new Error("The model returned no content.");
   const parsed = JSON.parse(response.text) as { title?: unknown; hook?: unknown; budgetNote?: unknown; stops?: unknown[] };
-  const rawStops = Array.isArray(parsed.stops) ? parsed.stops.slice(0, 3) : [];
+  const rawStops = Array.isArray(parsed.stops) ? parsed.stops.slice(0, 5) : [];
   const stops: Stop[] = [];
   for (const raw of rawStops) {
     const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
@@ -66,7 +67,7 @@ export async function generateAdminMedia(input: Input) {
   const title = clean(parsed.title, 100);
   const hook = clean(parsed.hook, 240);
   const budgetNote = clean(parsed.budgetNote, 240);
-  if (!title || !hook || !budgetNote || stops.length !== 3) throw new Error("The generated media was incomplete.");
+  if (!title || !hook || !budgetNote || stops.length < 2 || stops.length > 5) throw new Error("The generated media was incomplete.");
   const cover = await findCover(input.neighborhood, stops[0].places[0]?.name || title);
   return { title, hook, budgetNote, stops, cover, promptText, modelName };
 }

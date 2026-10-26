@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createAdminSupabaseClient } from "@/lib/supabase-admin";
 
 export async function GET(request: Request) {
   const { origin, searchParams } = new URL(request.url);
@@ -17,7 +18,19 @@ export async function GET(request: Request) {
         setAll: (items) => items.forEach(({ name, value, options }) => cookieStore.set(name, value, options)),
       } },
     );
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = user ? await createAdminSupabaseClient()
+        .from("profiles")
+        .select("is_superadmin")
+        .eq("id", user.id)
+        .maybeSingle() : { data: null };
+      if (!user || profile?.is_superadmin !== true) {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(`${origin}/unauthorized`);
+      }
+    }
   }
   return NextResponse.redirect(`${origin}${next}`);
 }

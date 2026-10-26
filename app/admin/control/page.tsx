@@ -1,0 +1,39 @@
+import { deleteControlRecord, saveControlRecord, type ControlEntity } from "@/app/admin/control/actions";
+import { getControlPlane } from "@/lib/control-plane";
+
+export const dynamic = "force-dynamic";
+
+export default async function ControlPage() {
+  const data = await getControlPlane();
+  const modelName = new Map(data.models.map((item) => [item.id, item.name]));
+  return <>
+    <header className="page-heading"><div><p className="eyebrow">Administrative configuration</p><h1>AI control plane</h1><p>Inspect prompt chains and manage the terms, examples, models, providers, and access rules that shape Sidequests.</p></div></header>
+
+    <ControlSection title="Prompt chains and steps" note="Read-only prompt structure; update traffic allocation below.">
+      {data.chains.map((chain) => <article className="control-record" key={chain.id}><div className="panel-heading"><div><h3>{chain.name}</h3><p>{chain.description}</p></div><span className={`status ${chain.is_active ? "status-live" : "status-hidden"}`}>{chain.is_active ? "active" : "inactive"}</span></div><ol>{data.steps.filter((step) => step.chain_id === chain.id).map((step) => <li key={step.id}><b>{step.name}</b><p>{step.template}</p></li>)}</ol></article>)}
+    </ControlSection>
+
+    <ControlSection title="Prompt chain mix" note="Read and update model allocation.">
+      {data.mix.map((item) => <RecordForm entity="mix" item={item} key={item.id}><label><span>Model</span><select name="model_id" defaultValue={item.model_id ?? ""}>{data.models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}</select></label><label><span>Weight</span><input name="weight" type="number" min="0" max="100" defaultValue={item.weight} /></label><Toggle name="is_enabled" checked={item.is_enabled} /></RecordForm>)}
+    </ControlSection>
+
+    <ControlSection title="Terms" note="Create, edit, activate, and delete generation guidance terms."><NewForm entity="term"><input name="phrase" placeholder="Term or phrase" required /><input name="category" placeholder="Category" defaultValue="guidance" /><input name="notes" placeholder="Notes" /><Toggle name="is_active" checked /></NewForm>{data.terms.map((item) => <RecordForm entity="term" item={item} key={item.id}><input name="phrase" defaultValue={item.phrase} required /><input name="category" defaultValue={item.category} /><input name="notes" defaultValue={item.notes ?? ""} /><Toggle name="is_active" checked={item.is_active} /></RecordForm>)}</ControlSection>
+
+    <ControlSection title="Generation examples" note="Reusable input/output examples for prompt development."><NewForm entity="example"><input name="name" placeholder="Example name" required /><textarea name="input" defaultValue="{}" aria-label="Input JSON" /><textarea name="output" defaultValue="{}" aria-label="Output JSON" /><Toggle name="is_active" checked /></NewForm>{data.examples.map((item) => <RecordForm entity="example" item={item} key={item.id}><input name="name" defaultValue={item.name} required /><textarea name="input" defaultValue={JSON.stringify(item.input, null, 2)} /><textarea name="output" defaultValue={JSON.stringify(item.output, null, 2)} /><input name="notes" defaultValue={item.notes ?? ""} placeholder="Notes" /><Toggle name="is_active" checked={item.is_active} /></RecordForm>)}</ControlSection>
+
+    <ControlSection title="LLM providers" note="Credentials remain in environment variables; only their variable names are stored."><NewForm entity="provider"><input name="slug" placeholder="provider-slug" required /><input name="name" placeholder="Provider name" required /><input name="base_url" placeholder="Base URL" /><input name="credential_env_var" placeholder="API_KEY_ENV_VAR" required /><Toggle name="is_enabled" checked /></NewForm>{data.providers.map((item) => <RecordForm entity="provider" item={item} key={item.id}><input name="slug" defaultValue={item.slug} /><input name="name" defaultValue={item.name} /><input name="base_url" defaultValue={item.base_url ?? ""} /><input name="credential_env_var" defaultValue={item.credential_env_var} /><Toggle name="is_enabled" checked={item.is_enabled} /></RecordForm>)}</ControlSection>
+
+    <ControlSection title="LLM models" note="Create and manage models and select a single default."><NewForm entity="model"><ProviderSelect providers={data.providers} /><input name="model_id" placeholder="API model ID" required /><input name="name" placeholder="Display name" required /><input name="description" placeholder="Description" /><Toggle name="is_enabled" checked /><Toggle name="is_default" label="Default" /></NewForm>{data.models.map((item) => <RecordForm entity="model" item={item} key={item.id}><ProviderSelect providers={data.providers} value={item.provider_id} /><input name="model_id" defaultValue={item.model_id} /><input name="name" defaultValue={item.name} /><input name="description" defaultValue={item.description ?? ""} /><Toggle name="is_enabled" checked={item.is_enabled} /><Toggle name="is_default" label="Default" checked={item.is_default} /></RecordForm>)}</ControlSection>
+
+    <ControlSection title="Allowed signup domains" note="Enabled domains may authenticate in the public application."><NewForm entity="domain"><input name="domain" placeholder="columbia.edu" required /><Toggle name="is_enabled" checked /></NewForm>{data.domains.map((item) => <RecordForm entity="domain" item={item} key={item.id}><input name="domain" defaultValue={item.domain} /><Toggle name="is_enabled" checked={item.is_enabled} /></RecordForm>)}</ControlSection>
+
+    <ControlSection title="Whitelisted email addresses" note="Exact-address exceptions to domain rules."><NewForm entity="email"><input name="email" type="email" placeholder="person@example.com" required /><Toggle name="is_enabled" checked /></NewForm>{data.emails.map((item) => <RecordForm entity="email" item={item} key={item.id}><input name="email" type="email" defaultValue={item.email} /><Toggle name="is_enabled" checked={item.is_enabled} /></RecordForm>)}</ControlSection>
+    <p className="quiet-note">Configured default model: {data.models.find((item) => item.is_default)?.name ?? "None"}. Active mix: {data.mix.map((item) => `${modelName.get(item.model_id) ?? "Unassigned"} ${item.weight}%`).join(", ") || "None"}.</p>
+  </>;
+}
+
+function ControlSection({ title, note, children }: { title: string; note: string; children: React.ReactNode }) { return <section className="control-section"><div className="panel-heading"><div><p className="eyebrow">Configuration</p><h2>{title}</h2><p>{note}</p></div></div><div className="control-list">{children}</div></section>; }
+function NewForm({ entity, children }: { entity: ControlEntity; children: React.ReactNode }) { return <form className="control-form control-new" action={saveControlRecord.bind(null, entity)}><b>Add new</b>{children}<button className="primary-button">Create</button></form>; }
+function RecordForm({ entity, item, children }: { entity: ControlEntity; item: { id: string }; children: React.ReactNode }) { return <form className="control-form" action={saveControlRecord.bind(null, entity)}><input type="hidden" name="id" value={item.id} />{children}<div className="control-actions"><button className="secondary-button">Save</button>{entity !== "mix" && <button className="danger-button" formAction={deleteControlRecord.bind(null, entity)}>Delete</button>}</div></form>; }
+function Toggle({ name, checked = false, label = "Enabled" }: { name: string; checked?: boolean; label?: string }) { return <label className="toggle-field"><input type="checkbox" name={name} defaultChecked={checked} /><span>{label}</span></label>; }
+function ProviderSelect({ providers, value }: { providers: Array<{ id: string; name: string }>; value?: string }) { return <select name="provider_id" defaultValue={value}>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select>; }
