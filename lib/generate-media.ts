@@ -1,15 +1,16 @@
 import "server-only";
 
 import { GoogleGenAI, Type } from "@google/genai";
+import type { GenerationControls } from "@/lib/generation-controls";
 
-type Input = { neighborhood: string; budgetMin: number; budgetMax: number; partySize: number; vibe: string; preferences: string };
+type Input = { neighborhood: string; budgetMin: number; budgetMax: number; partySize: number; vibe: string; preferences: string; controls?: GenerationControls };
 type Place = { name: string; address: string; mapQuery: string; latitude: number; longitude: number };
 type Stop = { label: string; activity: string; places: Place[] };
 
 export async function generateAdminMedia(input: Input) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini is not configured.");
-  const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const modelName = input.controls?.modelName || process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const promptText = [
     "Create one concise NYC sidequest with between two and five sequential stops.",
     `Area: ${input.neighborhood}`,
@@ -23,7 +24,11 @@ export async function generateAdminMedia(input: Input) {
     "Every place needs a proper name, useful address or area description, and precise map search query.",
     "Do not repeat area, budget, party size, or vibe in the title and hook when those facts are already metadata.",
     "Keep the route geographically practical. Never claim live prices, hours, accessibility, or availability.",
+    ...(input.controls?.promptSteps.length ? ["Active admin prompt-chain steps:", ...input.controls.promptSteps] : []),
+    ...(input.controls?.terms.length ? [`Active vocabulary and guidance terms: ${JSON.stringify(input.controls.terms)}`] : []),
+    ...(input.controls?.examples.length ? [`Approved generation examples: ${JSON.stringify(input.controls.examples)}`] : []),
   ].join("\n");
+  const startedAt = Date.now();
   const response = await new GoogleGenAI({ apiKey }).models.generateContent({
     model: modelName,
     contents: promptText,
@@ -69,7 +74,7 @@ export async function generateAdminMedia(input: Input) {
   const budgetNote = clean(parsed.budgetNote, 240);
   if (!title || !hook || !budgetNote || stops.length < 2 || stops.length > 5) throw new Error("The generated media was incomplete.");
   const cover = await findCover(input.neighborhood, stops[0].places[0]?.name || title);
-  return { title, hook, budgetNote, stops, cover, promptText, modelName };
+  return { title, hook, budgetNote, stops, cover, promptText, modelName, rawResponseText: response.text, latencyMs: Date.now() - startedAt };
 }
 
 async function geocode(query: string) {
