@@ -10,7 +10,9 @@ type Stop = { label: string; activity: string; places: Place[] };
 export async function generateAdminMedia(input: Input) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini is not configured.");
-  const modelName = input.controls?.modelName || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const primaryModel = input.controls?.modelName || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const qualityFallbackModel = process.env.GEMINI_QUALITY_FALLBACK_MODEL || "gemini-3.6-flash";
+  const emergencyFallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
   const promptText = [
     "Create one concise NYC sidequest with between two and five sequential stops.",
     `Area: ${input.neighborhood}`,
@@ -29,10 +31,10 @@ export async function generateAdminMedia(input: Input) {
     ...(input.controls?.examples.length ? [`Approved generation examples: ${JSON.stringify(input.controls.examples)}`] : []),
   ].join("\n");
   const startedAt = Date.now();
-  const response = await new GoogleGenAI({ apiKey }).models.generateContent({
-    model: modelName,
-    contents: promptText,
-    config: {
+  const ai = new GoogleGenAI({ apiKey });
+  const generate = (model: string) => ai.models.generateContent({
+    model, contents: promptText, config: {
+      httpOptions: { timeout: 35_000, retryOptions: { attempts: 2 } },
       temperature: 0.82,
       maxOutputTokens: 800,
       responseMimeType: "application/json",
@@ -50,6 +52,19 @@ export async function generateAdminMedia(input: Input) {
       },
     },
   });
+  let modelName = primaryModel;
+  let response: Awaited<ReturnType<typeof generate>> | undefined;
+  let lastError: unknown;
+  const modelChain = [...new Set([primaryModel, qualityFallbackModel, emergencyFallbackModel])];
+  for (const [index, model] of modelChain.entries()) {
+    try { response = await generate(model); modelName = model; break; }
+    catch (error) {
+      lastError = error;
+      if (!temporary(error) || index === modelChain.length - 1) throw error;
+      console.warn(`Gemini ${model} was temporarily unavailable; trying ${modelChain[index + 1]}`);
+    }
+  }
+  if (!response) throw lastError ?? new Error("The model returned no content.");
   if (!response.text) throw new Error("The model returned no content.");
   const parsed = JSON.parse(response.text) as { title?: unknown; hook?: unknown; budgetNote?: unknown; stops?: unknown[] };
   const rawStops = Array.isArray(parsed.stops) ? parsed.stops.slice(0, 5) : [];
@@ -108,3 +123,4 @@ async function findCover(neighborhood: string, place: string) {
 }
 
 function clean(value: unknown, max: number) { return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : ""; }
+function temporary(error: unknown) { const status = typeof error === "object" && error !== null && "status" in error ? Number((error as { status?: unknown }).status) : 0; const message = error instanceof Error ? error.message.toLowerCase() : ""; return status === 408 || status === 429 || status >= 500 || /high demand|unavailable|timeout|aborted/.test(message); }

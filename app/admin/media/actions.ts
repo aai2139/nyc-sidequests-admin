@@ -43,7 +43,7 @@ export async function createMedia(_state: MediaActionState, formData: FormData):
     if (request?.id) {
       await Promise.all([
         admin.from("generation_requests").update({ status: "succeeded", selected_stop_count: generated.stops.length, completed_at: new Date().toISOString() }).eq("id", request.id),
-        admin.from("llm_responses").insert({ generation_request_id: request.id, model_id: controls.modelRecordId, response_kind: "admin_generation", raw_text: generated.rawResponseText, parsed_output: { title: generated.title, hook: generated.hook, stops: generated.stops, budgetNote: generated.budgetNote }, latency_ms: generated.latencyMs }),
+        admin.from("llm_responses").insert({ generation_request_id: request.id, model_id: controls.modelRecordId, response_kind: "admin_generation", raw_text: generated.rawResponseText, parsed_output: { actualModelName: generated.modelName, title: generated.title, hook: generated.hook, stops: generated.stops, budgetNote: generated.budgetNote }, latency_ms: generated.latencyMs }),
       ]);
     }
     revalidatePath("/admin"); revalidatePath("/admin/media");
