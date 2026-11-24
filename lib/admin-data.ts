@@ -128,7 +128,7 @@ export async function getMediaItem(id: string) {
   return data as MediaRow | null;
 }
 
-export async function getRatings(value = "all") {
+export async function getRatings() {
   const admin = createAdminSupabaseClient();
   const [{ data: votes, error }, { data: media }, users] = await Promise.all([
     admin.from("votes").select("sidequest_id, user_id, value, created_at, updated_at").order("created_at", { ascending: false }).limit(500),
@@ -138,7 +138,7 @@ export async function getRatings(value = "all") {
   if (error) throw error;
   const mediaById = new Map((media ?? []).map((item) => [item.id, item]));
   const userById = new Map(users.map((user) => [user.id, user]));
-  return (votes ?? []).filter((vote) => value === "all" || String(vote.value) === value).map((vote) => ({
+  return (votes ?? []).map((vote) => ({
     ...vote,
     media: mediaById.get(vote.sidequest_id),
     user: userById.get(vote.user_id),
